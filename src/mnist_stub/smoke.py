@@ -17,6 +17,7 @@ from PIL import Image, ImageDraw
 from mnist_stub.common import write_json
 
 CLI = [sys.executable, "-m", "mnist_stub.commands.app"]
+TRAIN_CLI = [sys.executable, "-m", "mnist_stub.commands.train"]
 
 
 def run_smoke(output_dir: Path, data_dir: Path, real: bool, device: str) -> dict:
@@ -33,7 +34,10 @@ def run_smoke(output_dir: Path, data_dir: Path, real: bool, device: str) -> dict
 
     def command(name: str, arguments: list[str]) -> dict:
         started = time.monotonic()
-        process = subprocess.run(CLI + arguments, text=True, capture_output=True, timeout=1200)
+        entrypoint = TRAIN_CLI if arguments[0] == "fit" else CLI
+        process = subprocess.run(
+            entrypoint + arguments, text=True, capture_output=True, timeout=1200
+        )
         (directory / f"{name}.log").write_text(process.stderr + "\n" + process.stdout)
         stage = {
             "stage": name,
@@ -50,19 +54,28 @@ def run_smoke(output_dir: Path, data_dir: Path, real: bool, device: str) -> dict
 
     try:
         common = [
-            "--output-dir",
+            "--trainer.default_root_dir",
             str(directory),
-            "--data-dir",
+            "--data.path",
             str(data_dir.resolve()),
-            "--device",
-            device,
+            "--trainer.accelerator",
+            "cpu" if device == "cpu" else "gpu",
+            "--trainer.devices",
+            "1" if device == "cpu" else f"[{device.partition(':')[2] or '0'}]",
         ]
         if not real:
-            common += ["--synthetic"]
-        first = command("train", ["train", "--epochs", "1", *common])
+            common += ["--data.synthetic=true"]
+        first = command("train", ["fit", "--trainer.max_epochs", "1", *common])
         resumed = command(
             "resume",
-            ["train", "--resume", first["checkpoint"], "--epochs", "3" if real else "2", *common],
+            [
+                "fit",
+                "--ckpt_path",
+                first["checkpoint"],
+                "--trainer.max_epochs",
+                "3" if real else "2",
+                *common,
+            ],
         )
         pretrain = None
         for name, subset, freezes, lr in (
@@ -70,11 +83,14 @@ def run_smoke(output_dir: Path, data_dir: Path, real: bool, device: str) -> dict
             ("finetune", "b", 1, 0.0001),
         ):
             config = directory / f"{name}.yaml"
-            config.write_text(f"subset: {subset}\nfreeze_epochs: {freezes}\nlearning_rate: {lr}\n")
-            args = ["train", "--config", str(config), "--epochs", "2", *common]
+            config.write_text(
+                f"data:\n  subset: {subset}\nmodel:\n  freeze_epochs: {freezes}\n"
+                f"optimizer:\n  lr: {lr}\n"
+            )
+            args = ["fit", "--config", str(config), "--trainer.max_epochs", "2", *common]
             if name == "finetune":
                 assert pretrain is not None
-                args += ["--init-model", pretrain["model"]]
+                args += ["--init_model", pretrain["model"]]
             result = command(name, args)
             if name == "pretrain":
                 pretrain = result
@@ -107,7 +123,7 @@ def run_smoke(output_dir: Path, data_dir: Path, real: bool, device: str) -> dict
             "import sys, importlib.abc; "
             "exec('class Guard(importlib.abc.MetaPathFinder):\\n"
             " def find_spec(self, fullname, path=None, target=None):\\n"
-            '  if fullname.startswith(("mnist_stub.training", "torchvision")):'
+            '  if fullname.startswith(("mnist_stub.tasks", "lightning", "datasets")):'
             ' raise ImportError("training import forbidden")\'); '
             "sys.meta_path.insert(0, Guard()); "
             "import torch; torch.set_num_threads(2); "

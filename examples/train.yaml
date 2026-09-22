@@ -1,8 +1,24 @@
-epochs: 3
-batch_size: 64
-learning_rate: 0.001
-seed: 42
-device: cpu
+model:
+  freeze_epochs: 0
+data:
+  path: data-bin/MigoXV/mnist-4
+  batch_size: 64
+  num_workers: 0
+  subset: full
+optimizer:
+  lr: 0.001
+  weight_decay: 0.01
+checkpoint:
+  monitor: val_accuracy
+  save_top_k: 1
+logging:
+  enabled: true
+  progress: null
+  refresh_rate: 10
+trainer:
+  max_epochs: 3
+  accelerator: cpu
+  devices: 1
+  default_root_dir: outputs
+seed_everything: 42
 threads: 2
-num_workers: 0
-subset: full

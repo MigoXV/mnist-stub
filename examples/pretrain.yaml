@@ -1,3 +1,7 @@
-epochs: 2
-subset: a
-learning_rate: 0.001
+data:
+  path: data-bin/MigoXV/mnist-4
+  subset: a
+optimizer:
+  lr: 0.001
+trainer:
+  max_epochs: 2
