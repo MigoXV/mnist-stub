@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.env
+data-bin/
+model-bin/
+outputs/
+tmp-workspace/
+src/web/node_modules/
+src/web/dist/
+*.tsbuildinfo
+src/web/test-results/
+src/web/playwright-report/
