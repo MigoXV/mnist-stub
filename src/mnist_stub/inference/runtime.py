@@ -7,7 +7,8 @@ import torch
 
 from mnist_stub.assets import load_asset
 from mnist_stub.inference.images import Polarity, prepare_image
-from mnist_stub.models.cnn import PREPROCESSING, resolve_device
+from mnist_stub.models.cnn import resolve_device
+from mnist_stub.models.processing import MnistProcessor
 
 
 class Runtime:
@@ -23,8 +24,7 @@ class Runtime:
     def predict(self, payload: bytes, features: bool = False, polarity: Polarity = "auto") -> dict:
         start = time.perf_counter()
         pixels = prepare_image(payload, polarity)
-        tensor = torch.from_numpy(pixels).float().unsqueeze(0).unsqueeze(0).div(255)
-        tensor = ((tensor - PREPROCESSING["mean"]) / PREPROCESSING["std"]).to(self.device)
+        tensor = MnistProcessor()(pixels)["pixel_values"].to(self.device)
         with torch.inference_mode():
             logits, activations = self.model.forward_features(tensor)
             probabilities = logits.softmax(-1)[0].cpu().tolist()

@@ -2,6 +2,14 @@ from __future__ import annotations
 
 import torch
 from torch import nn
+from transformers import (
+    AutoConfig,
+    AutoModel,
+    AutoModelForImageClassification,
+    PretrainedConfig,
+    PreTrainedModel,
+)
+from transformers.modeling_outputs import ImageClassifierOutput
 
 ARCHITECTURE = "mnist-cnn-v1"
 FEATURES = {
@@ -20,16 +28,28 @@ PREPROCESSING = {
 }
 
 
-class MnistCNN(nn.Module):
-    def __init__(self) -> None:
-        super().__init__()
+class MnistConfig(PretrainedConfig):
+    model_type = "mnist-cnn"
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.num_labels = 10
+
+
+class MnistCNN(PreTrainedModel):
+    config_class = MnistConfig
+    main_input_name = "pixel_values"
+
+    def __init__(self, config: MnistConfig | None = None) -> None:
+        super().__init__(config or MnistConfig())
         self.conv1 = nn.Conv2d(1, 16, 3, padding=1)
         self.conv2 = nn.Conv2d(16, 32, 3, padding=1)
         self.fc1 = nn.Linear(32 * 7 * 7, 64)
         self.fc2 = nn.Linear(64, 10)
+        self.post_init()
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.forward_features(x)[0]
+    def forward(self, pixel_values: torch.Tensor) -> ImageClassifierOutput:
+        return ImageClassifierOutput(logits=self.forward_features(pixel_values)[0])
 
     def forward_features(self, x: torch.Tensor) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         conv1 = torch.relu(self.conv1(x))
@@ -61,3 +81,8 @@ def resolve_device(name: str) -> torch.device:
         if device.index is not None and device.index >= torch.cuda.device_count():
             raise ValueError(f"CUDA 设备不存在: {name}")
     return device
+
+
+AutoConfig.register(MnistConfig.model_type, MnistConfig)
+AutoModel.register(MnistConfig, MnistCNN)
+AutoModelForImageClassification.register(MnistConfig, MnistCNN)

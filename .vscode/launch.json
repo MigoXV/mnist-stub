@@ -1,0 +1,33 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "train",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "mnist_stub.commands.train",
+      "console": "integratedTerminal",
+      "envFile": "${workspaceFolder}/.env",
+      "args": [
+        "fit",
+        "--config",
+        "examples/train.yaml",
+        "--logging.progress=true"
+      ]
+    },
+    {
+      "name": "backend",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "mnist_stub.commands.app",
+      "console": "integratedTerminal",
+      "envFile": "${workspaceFolder}/.env",
+      "preLaunchTask": "web: build",
+      "args": [
+        "serve",
+        "--model",
+        "model-bin/mnist"
+      ]
+    }
+  ]
+}

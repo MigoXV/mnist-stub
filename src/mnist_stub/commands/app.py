@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import signal
 from pathlib import Path
 
 import typer
@@ -16,79 +15,13 @@ def emit(value: dict) -> None:
 
 
 @app.command()
-def prepare_data(
-    data_dir: Path = typer.Option(Path("data-bin"), envvar="MNIST_DATA_DIR"),
-) -> None:
-    """显式下载并校验 MNIST 数据。"""
-    from mnist_stub.training.data import prepare_data as prepare
-
-    prepare(data_dir)
-    emit({"data_dir": str(data_dir)})
-
-
-@app.command()
-def train(
-    config: Path | None = typer.Option(None, "--config"),
-    resume: Path | None = typer.Option(None, "--resume"),
-    init_model: Path | None = typer.Option(None, "--init-model"),
-    epochs: int | None = typer.Option(None, "--epochs"),
-    device: str | None = typer.Option(None, envvar="MNIST_DEVICE"),
-    data_dir: str | None = typer.Option(None, envvar="MNIST_DATA_DIR"),
-    output_dir: str | None = typer.Option(None, envvar="MNIST_OUTPUT_DIR"),
-    synthetic: bool | None = typer.Option(None, "--synthetic/--real"),
-    train_limit: int | None = typer.Option(None),
-    validation_limit: int | None = typer.Option(None),
-    test_limit: int | None = typer.Option(None),
-) -> None:
-    """训练；resume 的 epochs 表示目标总 Epoch 数。"""
-    from mnist_stub.configs.training import read_config
-    from mnist_stub.training.checkpoints import load_checkpoint
-    from mnist_stub.training.engine import train as execute
-
-    overrides = dict(
-        epochs=epochs,
-        device=device,
-        data_dir=data_dir,
-        output_dir=output_dir,
-        synthetic=synthetic,
-        train_limit=train_limit,
-        validation_limit=validation_limit,
-        test_limit=test_limit,
-    )
-    if resume and config is None:
-        from mnist_stub.configs.training import TrainConfig
-
-        values = load_checkpoint(resume)["config"]
-        values.update({key: value for key, value in overrides.items() if value is not None})
-        settings = TrainConfig.model_validate(values)
-    else:
-        settings = read_config(config, overrides)
-
-    def interrupt(signum, frame):
-        raise KeyboardInterrupt("收到 SIGTERM，从最近完整 Epoch 的 Checkpoint 恢复")
-
-    previous_handler = signal.signal(signal.SIGTERM, interrupt)
-    try:
-        run = execute(settings, resume, init_model)
-    finally:
-        signal.signal(signal.SIGTERM, previous_handler)
-    emit(
-        {
-            "run_dir": str(run),
-            "model": str(run / "model"),
-            "checkpoint": str(run / "checkpoints" / "last.pt"),
-        }
-    )
-
-
-@app.command()
 def export(
     checkpoint: Path = typer.Argument(...),
     destination: Path = typer.Argument(...),
     best: bool = typer.Option(True, "--best/--current"),
 ) -> None:
     """将训练 Checkpoint 转为可独立部署的模型资产。"""
-    from mnist_stub.training.engine import export_checkpoint
+    from mnist_stub.exporting import export_checkpoint
 
     emit({"model": str(export_checkpoint(checkpoint, destination, best))})
 
@@ -101,9 +34,9 @@ def evaluate(
     device: str | None = typer.Option(None, envvar="MNIST_DEVICE"),
 ) -> None:
     from mnist_stub.configs.training import read_config
-    from mnist_stub.training.engine import evaluate as execute
+    from mnist_stub.tasks.run import evaluate as execute
 
-    emit(execute(model, read_config(config, {"data_dir": data_dir, "device": device})))
+    emit(execute(model, read_config(config, {"data.path": data_dir, "trainer.device": device})))
 
 
 @app.command()
@@ -146,7 +79,7 @@ def serve(
 @app.command()
 def smoke(
     output_dir: Path = typer.Option(Path("outputs/smoke"), envvar="MNIST_OUTPUT_DIR"),
-    data_dir: Path = typer.Option(Path("data-bin"), envvar="MNIST_DATA_DIR"),
+    data_dir: Path = typer.Option(Path("data-bin/MigoXV/mnist-4"), envvar="MNIST_DATA_DIR"),
     real: bool = typer.Option(False, help="使用已准备的完整 MNIST，并要求准确率 >= 97%"),
     device: str = typer.Option("cpu", envvar="MNIST_DEVICE"),
 ) -> None:
